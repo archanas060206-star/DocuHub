@@ -270,21 +270,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines.
 ---
 
 ## 🎥 Demo
-
-> 🚧 **Live demo coming soon!** For now, clone and run locally to try it out.
-
 ### Screenshots
-
-<table>
-  <tr>
-    <td><img src="https://via.placeholder.com/400x300/4A90E2/FFFFFF?text=PDF+Merge" alt="PDF Merge"/></td>
-    <td><img src="https://via.placeholder.com/400x300/4A90E2/FFFFFF?text=OCR+Processing" alt="OCR"/></td>
-  </tr>
-  <tr>
-    <td><img src="https://via.placeholder.com/400x300/4A90E2/FFFFFF?text=Data+Converter" alt="Data Converter"/></td>
-    <td><img src="https://via.placeholder.com/400x300/4A90E2/FFFFFF?text=Pipeline+Builder" alt="Pipeline"/></td>
-  </tr>
-</table>
 
 ---
 
@@ -369,15 +355,6 @@ If DocuHub helps you, consider:
 - 🤝 **Contribute** – Submit a PR
 - 📢 **Spread the word** – Tell others about DocuHub
 
----
-
-## 📞 Contact
-
-- **Issues**: [GitHub Issues](https://github.com/yourusername/docuhub/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/yourusername/docuhub/discussions)
-- **Email**: hello@docuhub.dev *(coming soon)*
-
----
 
 <div align="center">
 
