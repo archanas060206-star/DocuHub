@@ -22,7 +22,7 @@
 
 DocuHub is a **comprehensive, browser-based document toolkit** that performs all processing locally using WebAssembly. Built with TypeScript in a single, unified repository, it handles PDFs, document conversions, data transformations, and OCR—**entirely offline**.
 
-### The Problem We Solve
+### 🛑 The Problem We Solve
 
 Most document tools require uploading sensitive files to unknown servers. DocuHub eliminates this privacy risk by processing everything in your browser. No data ever leaves your device.
 
