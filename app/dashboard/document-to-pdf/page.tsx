@@ -7,6 +7,7 @@ import * as mammoth from "mammoth";
 export default function DocumentToPdfPage() {
   const [files, setFiles] = useState<File[]>([]);
   const [loading, setLoading] = useState(false);
+  const [isDragging, setIsDragging] = useState(false); // ✅ NEW
 
   const handleConvert = async () => {
     if (!files.length) {
@@ -22,7 +23,7 @@ export default function DocumentToPdfPage() {
 
       console.log("Processing:", file.name);
 
-      // ✅ DOCX Support (case insensitive)
+      // DOCX Support
       if (file.name.toLowerCase().endsWith(".docx")) {
         console.log("DOCX detected");
 
@@ -33,20 +34,18 @@ export default function DocumentToPdfPage() {
         });
 
         text = result.value || "";
-      } 
-      else {
+      } else {
         console.log("Text file detected");
         text = await file.text();
       }
 
-      // ✅ Validate text extracted
       if (!text || text.trim().length === 0) {
         throw new Error("No readable text found in file");
       }
 
-      // ✅ Create PDF
+      // Create PDF
       const pdfDoc = await PDFDocument.create();
-      const page = pdfDoc.addPage([595, 842]); // A4
+      const page = pdfDoc.addPage([595, 842]);
 
       const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
 
@@ -54,7 +53,6 @@ export default function DocumentToPdfPage() {
       const margin = 50;
       const { width, height } = page.getSize();
 
-      // ✅ Word Wrap Safe Version
       const words = text.split(/\s+/);
       let lines: string[] = [];
       let currentLine = "";
@@ -73,7 +71,6 @@ export default function DocumentToPdfPage() {
 
       if (currentLine) lines.push(currentLine);
 
-      // ✅ Draw text safely
       let y = height - margin;
 
       for (const line of lines) {
@@ -92,7 +89,6 @@ export default function DocumentToPdfPage() {
 
       const pdfBytes = await pdfDoc.save();
 
-      // ✅ Download
       const blob = new Blob([pdfBytes], { type: "application/pdf" });
       const url = URL.createObjectURL(blob);
 
@@ -117,16 +113,53 @@ export default function DocumentToPdfPage() {
     <div style={{ maxWidth: 600, margin: "40px auto" }}>
       <h1>Document to PDF</h1>
 
-      <input
-        type="file"
-        accept=".txt,.html,.json,.docx"
-        onChange={(e) => {
-          if (!e.target.files) return;
-          setFiles(Array.from(e.target.files));
+      {/* ✅ NEW DRAG + DROP AREA */}
+      <div
+        onDragOver={(e) => {
+          e.preventDefault();
+          setIsDragging(true);
         }}
-      />
+        onDragLeave={() => {
+          setIsDragging(false);
+        }}
+        onDrop={(e) => {
+          e.preventDefault();
+          setIsDragging(false);
 
-      <br /><br />
+          if (e.dataTransfer.files) {
+            setFiles(Array.from(e.dataTransfer.files));
+          }
+        }}
+        style={{
+          border: isDragging ? "2px solid #4f46e5" : "2px dashed #aaa",
+          background: isDragging ? "#eef2ff" : "transparent",
+          padding: "40px",
+          textAlign: "center",
+          borderRadius: "10px",
+          transition: "all 0.2s ease",
+          cursor: "pointer",
+          marginTop: "20px"
+        }}
+      >
+        <input
+          type="file"
+          accept=".txt,.html,.json,.docx"
+          onChange={(e) => {
+            if (!e.target.files) return;
+            setFiles(Array.from(e.target.files));
+          }}
+          style={{ display: "none" }}
+          id="fileUpload"
+        />
+
+        <label htmlFor="fileUpload" style={{ cursor: "pointer" }}>
+          {isDragging
+            ? "Drop file here 📂"
+            : "Drag & drop file here OR Click to select"}
+        </label>
+      </div>
+
+      <br />
 
       <button onClick={handleConvert} disabled={loading}>
         {loading ? "Converting..." : "Convert to PDF"}
@@ -134,4 +167,3 @@ export default function DocumentToPdfPage() {
     </div>
   );
 }
-
