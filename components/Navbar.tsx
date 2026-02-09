@@ -15,19 +15,19 @@ export default function Navbar() {
         {/* Nav Links */}
         <div className="flex gap-6 text-sm font-medium text-muted-foreground">
 
-          <Link href="/dashboard/pdf-tools" className="hover:text-black transition">
+          <Link href="/dashboard" className="hover:text-black transition">
             PDF Tools
           </Link>
 
-          <Link href="/dashboard/ocr" className="hover:text-black transition">
+          <Link href="/tool/ocr" className="hover:text-black transition">
             OCR
           </Link>
 
-          <Link href="/dashboard/file-conversion" className="hover:text-black transition">
+          <Link href="/tool/file-conversion" className="hover:text-black transition">
             File Conversion
           </Link>
 
-          <Link href="/dashboard/data-tools" className="hover:text-black transition">
+          <Link href="/tool/data-tools" className="hover:text-black transition">
             Data Tools
           </Link>
 
