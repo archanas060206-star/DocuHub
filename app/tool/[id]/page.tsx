@@ -1,10 +1,21 @@
 "use client";
 
-import { ArrowLeft, Upload, Combine, Scissors, FileUp } from "lucide-react";
+import {
+  ArrowLeft,
+  Upload,
+  Combine,
+  Scissors,
+  FileUp,
+  Loader2,
+} from "lucide-react";
+
 import { ToolCard } from "@/components/ToolCard";
 import { useRouter, useParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
+import { storeFile } from "@/lib/fileStore";
+
+const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 
 export default function ToolUploadPage() {
   const router = useRouter();
@@ -17,6 +28,8 @@ export default function ToolUploadPage() {
   const [hasUnsavedWork, setHasUnsavedWork] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [fileError, setFileError] = useState<string | null>(null);
+  const [isDraggingOver, setIsDraggingOver] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   /* --------------------------------------------
@@ -57,7 +70,7 @@ export default function ToolUploadPage() {
     }
   };
 
-  const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -70,13 +83,82 @@ export default function ToolUploadPage() {
       return;
     }
 
+    if (file.size > MAX_FILE_SIZE) {
+      setFileError(
+        `File is too large (${(file.size / 1024 / 1024).toFixed(1)}MB). Max allowed: 10MB.`
+      );
+      e.target.value = "";
+      return;
+    }
+
     setFileError(null);
     setSelectedFile(file);
     setHasUnsavedWork(true);
+    
+    // Don't auto-navigate - let user click "Process File" button
+  };
 
-    setTimeout(() => {
-      router.push(`/tool/${toolId}/processing`);
-    }, 500);
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDraggingOver(true);
+  };
+
+  const handleDragLeave = () => {
+    setIsDraggingOver(false);
+  };
+
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDraggingOver(false);
+
+    const file = e.dataTransfer.files?.[0];
+    if (!file) return;
+
+    const allowedTypes = getSupportedTypes();
+    const extension = "." + file.name.split(".").pop()?.toLowerCase();
+
+    if (allowedTypes.length && !allowedTypes.includes(extension)) {
+      setFileError(
+        `Unsupported file type. Allowed: ${allowedTypes.join(", ")}`
+      );
+      return;
+    }
+
+    if (file.size > MAX_FILE_SIZE) {
+      setFileError(
+        `File is too large (${(file.size / 1024 / 1024).toFixed(1)}MB). Max allowed: 10MB.`
+      );
+      return;
+    }
+
+    setFileError(null);
+    setSelectedFile(file);
+    setHasUnsavedWork(true);
+  };
+
+  const handleClickUpload = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleProcessFile = async () => {
+    if (!selectedFile) return;
+
+    setIsProcessing(true);
+    setFileError(null);
+
+    try {
+      const success = await storeFile(selectedFile);
+      if (success) {
+        router.push(`/tool/${toolId}/processing`);
+      } else {
+        setFileError("Failed to process file. Please try again.");
+      }
+    } catch (err) {
+      setFileError("An error occurred while processing the file.");
+      console.error(err);
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   const handleBackNavigation = () => {
@@ -144,42 +226,70 @@ export default function ToolUploadPage() {
           Upload your file
         </h1>
 
-        <div className="w-full max-w-5xl">
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="relative w-full rounded-2xl border-2 border-dashed bg-[#eef6f5]"
-          >
-            <label className="flex flex-col items-center justify-center h-[400px] cursor-pointer">
-              <Upload className="w-16 h-16 mb-4" />
-              <p className="text-xl font-medium">
-                Drag & drop your file here
-              </p>
-              <p className="text-muted-foreground">
-                or click to browse
-              </p>
-              <input
-                type="file"
-                className="hidden"
-                ref={fileInputRef}
-                onChange={handleFile}
-              />
-            </label>
-          </motion.div>
+        <motion.div
+          onClick={handleClickUpload}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+          className={`border-2 border-dashed rounded-xl p-20 text-center cursor-pointer transition-colors ${
+            isDraggingOver ? "border-blue-500 bg-blue-50" : "hover:border-gray-400"
+          }`}
+        >
 
-          {fileError && (
-            <p className="mt-3 text-sm text-red-600">{fileError}</p>
-          )}
+          <Upload className="mx-auto mb-4" />
 
-          <div className="flex justify-between text-xs text-muted-foreground mt-4">
-            <span>
-              Supported formats:{" "}
-              {getSupportedTypes().length
-                ? getSupportedTypes().join(", ")
-                : "—"}
-            </span>
-            <span>Max file size: 10MB</span>
+          <p>Drag & drop or click to browse</p>
+          <p className="text-sm text-gray-500 mt-2">
+            Supported: {getSupportedTypes().join(", ")}
+          </p>
+
+          <input
+            type="file"
+            ref={fileInputRef}
+            accept={getSupportedTypes().join(",")}
+            className="hidden"
+            onChange={handleFile}
+          />
+
+        </motion.div>
+
+        {selectedFile && (
+          <div className="mt-4">
+
+            <p className="font-medium">{selectedFile.name}</p>
+            <p className="text-sm text-gray-500">
+              {(selectedFile.size / 1024 / 1024).toFixed(2)} MB
+            </p>
+
+            <button
+              onClick={handleProcessFile}
+              disabled={isProcessing}
+              className="mt-3 px-4 py-2 bg-black text-white rounded disabled:opacity-50 flex items-center gap-2"
+            >
+              {isProcessing ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Processing...
+                </>
+              ) : (
+                "Process File"
+              )}
+            </button>
           </div>
+        )}
+
+        {fileError && (
+          <p className="mt-3 text-sm text-red-600">{fileError}</p>
+        )}
+
+        <div className="flex justify-between text-xs text-muted-foreground mt-4">
+          <span>
+            Supported formats:{" "}
+            {getSupportedTypes().length
+              ? getSupportedTypes().join(", ")
+              : "—"}
+          </span>
+          <span>Max file size: 10MB</span>
         </div>
       </main>
     </div>
