@@ -131,11 +131,14 @@ export default function MetadataViewerPage() {
 
             </div>
 
+          <div>
+            <strong>Size:</strong> {formatSize(file.size)}
           </div>
-        )}
 
       </div>
 
     </div>
+
+  </div>
   );
 }
