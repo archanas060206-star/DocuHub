@@ -1,11 +1,10 @@
 "use client";
-<<<<<<< persist-tool-state
-=======
-import { Minimize2, X } from "lucide-react";
->>>>>>> main
 
 import Link from "next/link";
 import {
+  Minimize2,
+  Trash2,
+  X,
   ArrowLeft,
   Upload,
   Combine,
@@ -13,7 +12,6 @@ import {
   FileUp,
   Loader2,
   FileText,
-  Minimize2,
 } from "lucide-react";
 
 import { ToolCard } from "@/components/ToolCard";
@@ -43,30 +41,23 @@ export default function ToolUploadPage() {
   const [fileError, setFileError] = useState<string | null>(null);
   const [isDraggingOver, setIsDraggingOver] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [files, setFiles] = useState<File[]>([]);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  // 🔹 Persisted metadata (NOT File object)
   const [persistedFileMeta, setPersistedFileMeta] = useState<{
     name: string;
     size: number;
     type: string;
   } | null>(null);
 
-  /* --------------------------------------------
-     Restore persisted state on refresh
-  --------------------------------------------- */
+  /* Restore persisted state */
   useEffect(() => {
     if (!toolId) return;
-
     const stored = loadToolState(toolId);
-    if (stored?.fileMeta) {
-      setPersistedFileMeta(stored.fileMeta);
-    }
+    if (stored?.fileMeta) setPersistedFileMeta(stored.fileMeta);
   }, [toolId]);
 
-  /* --------------------------------------------
-     Persist state when file changes
-  --------------------------------------------- */
+  /* Persist state */
   useEffect(() => {
     if (!toolId) return;
 
@@ -81,18 +72,14 @@ export default function ToolUploadPage() {
     }
   }, [toolId, selectedFile]);
 
-  /* --------------------------------------------
-     Remember last-used tool + analytics
-  --------------------------------------------- */
+  /* Recent tools tracking */
   useEffect(() => {
     if (!toolId || toolId === "pdf-tools") return;
 
     localStorage.setItem("lastUsedTool", toolId);
     localStorage.removeItem("hideResume");
 
-    const existing = JSON.parse(
-      localStorage.getItem("recentTools") || "[]"
-    );
+    const existing = JSON.parse(localStorage.getItem("recentTools") || "[]");
 
     const updated = [
       toolId,
@@ -102,9 +89,7 @@ export default function ToolUploadPage() {
     localStorage.setItem("recentTools", JSON.stringify(updated));
   }, [toolId]);
 
-  /* --------------------------------------------
-     Warn before refresh
-  --------------------------------------------- */
+  /* Warn before refresh */
   useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
       if (!hasUnsavedWork) return;
@@ -131,9 +116,7 @@ export default function ToolUploadPage() {
     }
   };
 
-  /* --------------------------------------------
-     FILE INPUT
-  --------------------------------------------- */
+  /* File input */
   const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -148,32 +131,51 @@ export default function ToolUploadPage() {
 
     if (file.size > MAX_FILE_SIZE) {
       setFileError(
-        `File too large (${(file.size / 1024 / 1024).toFixed(
-          1
-        )}MB). Max 10MB.`
+        `File too large (${(file.size / 1024 / 1024).toFixed(1)}MB). Max 10MB.`
       );
       return;
     }
 
     setFileError(null);
     setSelectedFile(file);
+    setFiles((prev) => [...prev, file]);
     setHasUnsavedWork(true);
   };
 
-<<<<<<< persist-tool-state
-  /* --------------------------------------------
-     PROCESS FILE
-  --------------------------------------------- */
-=======
-  /* REMOVE FILE */
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDraggingOver(false);
+
+    const file = e.dataTransfer.files?.[0];
+    if (!file) return;
+
+    const allowed = getSupportedTypes();
+    const ext = "." + file.name.split(".").pop()?.toLowerCase();
+
+    if (allowed.length && !allowed.includes(ext)) {
+      setFileError(`Unsupported file type. Allowed: ${allowed.join(", ")}`);
+      return;
+    }
+
+    if (file.size > MAX_FILE_SIZE) {
+      setFileError(
+        `File too large (${(file.size / 1024 / 1024).toFixed(1)}MB). Max 10MB.`
+      );
+      return;
+    }
+
+    setFileError(null);
+    setSelectedFile(file);
+    setFiles((prev) => [...prev, file]);
+    setHasUnsavedWork(true);
+  };
+
   const handleRemoveFile = () => {
     setSelectedFile(null);
     setFiles([]);
     setHasUnsavedWork(false);
   };
 
-  /* PROCESS FILE */
->>>>>>> main
   const handleProcessFile = async () => {
     if (!selectedFile) return;
 
@@ -195,9 +197,17 @@ export default function ToolUploadPage() {
     }
   };
 
-  /* --------------------------------------------
-     PDF TOOLS PAGE
-  --------------------------------------------- */
+  const handleBackNavigation = () => {
+    if (hasUnsavedWork) {
+      const confirmLeave = window.confirm(
+        "You have unsaved work. Are you sure you want to leave?"
+      );
+      if (!confirmLeave) return;
+    }
+    router.push("/dashboard");
+  };
+
+  /* PDF Tools page */
   if (toolId === "pdf-tools") {
     return (
       <div className="min-h-screen flex flex-col">
@@ -206,59 +216,27 @@ export default function ToolUploadPage() {
           <p className="text-muted-foreground mb-12">Choose a PDF tool</p>
 
           <div className="grid gap-6 md:grid-cols-2 max-w-5xl">
-            <ToolCard
-              icon={Combine}
-              title="Merge PDF"
-              description="Combine multiple PDFs"
-              href="/dashboard/pdf-merge"
-            />
-            <ToolCard
-              icon={Minimize2}
-              title="Compress PDF"
-              description="Reduce PDF file size"
-              href="/tool/pdf-compress"
-            />
-            <ToolCard
-              icon={Scissors}
-              title="Split PDF"
-              description="Split PDF pages"
-              href="/dashboard/pdf-split"
-            />
-            <ToolCard
-              icon={FileText}
-              title="Protect PDF"
-              description="Add password protection"
-              href="/tool/pdf-protect"
-            />
-            <ToolCard
-              icon={FileUp}
-              title="Document to PDF"
-              description="Convert documents to PDF"
-              href="/dashboard/document-to-pdf"
-            />
+            <ToolCard icon={Combine} title="Merge PDF" description="Combine multiple PDFs" href="/dashboard/pdf-merge" />
+            <ToolCard icon={Minimize2} title="Compress PDF" description="Reduce PDF file size" href="/tool/pdf-compress" />
+            <ToolCard icon={Scissors} title="Split PDF" description="Split PDF pages" href="/dashboard/pdf-split" />
+            <ToolCard icon={FileText} title="Protect PDF" description="Add password protection" href="/tool/pdf-protect" />
+            <ToolCard icon={FileUp} title="Document to PDF" description="Convert documents to PDF" href="/dashboard/document-to-pdf" />
           </div>
         </main>
       </div>
     );
   }
 
-  /* --------------------------------------------
-     UPLOAD PAGE
-  --------------------------------------------- */
+  /* Upload page */
   return (
     <div className="min-h-screen flex flex-col">
       <main className="container mx-auto px-6 py-12 md:px-12">
-        <Link
-          href="/dashboard"
-          className="inline-flex items-center gap-2 text-sm mb-6"
-        >
+        <button onClick={handleBackNavigation} className="inline-flex items-center gap-2 text-sm mb-6">
           <ArrowLeft className="w-4 h-4" />
           Back to Dashboard
-        </Link>
+        </button>
 
-        <h1 className="text-3xl font-semibold mb-8">
-          Upload your file
-        </h1>
+        <h1 className="text-3xl font-semibold mb-8">Upload your file</h1>
 
         <motion.div
           whileHover={{ scale: 1.01 }}
@@ -269,10 +247,9 @@ export default function ToolUploadPage() {
             setIsDraggingOver(true);
           }}
           onDragLeave={() => setIsDraggingOver(false)}
+          onDrop={handleDrop}
           className={`border-2 border-dashed rounded-xl p-20 text-center cursor-pointer ${
-            isDraggingOver
-              ? "border-blue-500 bg-blue-50"
-              : "hover:border-gray-400 hover:bg-gray-50"
+            isDraggingOver ? "border-blue-500 bg-blue-50" : "hover:border-gray-400 hover:bg-gray-50"
           }`}
         >
           <Upload className="mx-auto mb-4" />
@@ -291,10 +268,6 @@ export default function ToolUploadPage() {
         </motion.div>
 
         {selectedFile && (
-<<<<<<< persist-tool-state
-          <div className="mt-4">
-            <p className="font-medium">{selectedFile.name}</p>
-=======
           <div className="mt-6 space-y-4">
             <div className="flex items-center gap-3 p-4 rounded-xl border bg-white shadow-sm">
               <FileText className="w-8 h-8 text-blue-500" />
@@ -306,18 +279,16 @@ export default function ToolUploadPage() {
                 </p>
               </div>
 
-              {/* ✅ UPDATED REMOVE BUTTON (Icon + Text, No Logic Change) */}
               <button
                 onClick={handleRemoveFile}
-                className="flex items-center gap-2 px-3 py-1.5 text-sm text-red-600 border border-red-200 rounded-lg hover:bg-red-50 transition"
+                type="button"
+                className="flex items-center gap-2 px-3.5 py-2 text-sm font-medium text-red-600 border border-red-200 rounded-lg hover:bg-red-50 transition-all"
               >
-                <X className="w-4 h-4" />
+                <Trash2 className="w-4 h-4" />
                 Remove
               </button>
 
-              {isProcessing && (
-                <Loader2 className="w-5 h-5 animate-spin text-blue-500" />
-              )}
+              {isProcessing && <Loader2 className="w-5 h-5 animate-spin text-blue-500" />}
             </div>
 
             {isProcessing && (
@@ -326,14 +297,16 @@ export default function ToolUploadPage() {
               </div>
             )}
 
->>>>>>> main
             <button
               onClick={handleProcessFile}
               disabled={isProcessing}
-              className="mt-3 px-4 py-2 bg-black text-white rounded flex items-center gap-2"
+              className="px-5 py-2.5 bg-black text-white rounded-lg flex items-center gap-2 disabled:opacity-60"
             >
               {isProcessing ? (
-                <Loader2 className="animate-spin" />
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Processing...
+                </>
               ) : (
                 "Process File"
               )}
@@ -341,9 +314,7 @@ export default function ToolUploadPage() {
           </div>
         )}
 
-        {fileError && (
-          <p className="mt-3 text-sm text-red-600">{fileError}</p>
-        )}
+        {fileError && <p className="mt-3 text-sm text-red-600">{fileError}</p>}
       </main>
     </div>
   );
