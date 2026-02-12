@@ -2,9 +2,6 @@
 
 import Link from "next/link";
 import {
-  Minimize2,
-  Trash2,
-  X,
   ArrowLeft,
   Upload,
   Combine,
@@ -12,6 +9,8 @@ import {
   FileUp,
   Loader2,
   FileText,
+  Minimize2,
+  Trash2,
 } from "lucide-react";
 
 import { ToolCard } from "@/components/ToolCard";
@@ -36,20 +35,22 @@ export default function ToolUploadPage() {
     ? params.id[0]
     : (params.id as string);
 
-  const [hasUnsavedWork, setHasUnsavedWork] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [fileError, setFileError] = useState<string | null>(null);
   const [isDraggingOver, setIsDraggingOver] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [files, setFiles] = useState<File[]>([]);
+  const [hasUnsavedWork, setHasUnsavedWork] = useState(false);
+
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
+  // Persisted metadata only
   const [persistedFileMeta, setPersistedFileMeta] = useState<{
     name: string;
     size: number;
     type: string;
   } | null>(null);
 
+  // Compression level (pdf-compress)
   const [compressionLevel, setCompressionLevel] = useState<
     "low" | "medium" | "high"
   >("medium");
@@ -63,34 +64,16 @@ export default function ToolUploadPage() {
 
   /* Persist state */
   useEffect(() => {
-    if (!toolId) return;
-    if (selectedFile) {
-      saveToolState(toolId, {
-        fileMeta: {
-          name: selectedFile.name,
-          size: selectedFile.size,
-          type: selectedFile.type,
-        },
-      });
-    }
+    if (!toolId || !selectedFile) return;
+
+    saveToolState(toolId, {
+      fileMeta: {
+        name: selectedFile.name,
+        size: selectedFile.size,
+        type: selectedFile.type,
+      },
+    });
   }, [toolId, selectedFile]);
-
-  /* Recent tools tracking */
-  useEffect(() => {
-    if (!toolId || toolId === "pdf-tools") return;
-
-    localStorage.setItem("lastUsedTool", toolId);
-    localStorage.removeItem("hideResume");
-
-    const existing = JSON.parse(localStorage.getItem("recentTools") || "[]");
-
-    const updated = [
-      toolId,
-      ...existing.filter((t: string) => t !== toolId),
-    ].slice(0, 5);
-
-    localStorage.setItem("recentTools", JSON.stringify(updated));
-  }, [toolId]);
 
   /* Warn before refresh */
   useEffect(() => {
@@ -99,6 +82,7 @@ export default function ToolUploadPage() {
       e.preventDefault();
       e.returnValue = "";
     };
+
     window.addEventListener("beforeunload", handleBeforeUnload);
     return () =>
       window.removeEventListener("beforeunload", handleBeforeUnload);
@@ -119,6 +103,7 @@ export default function ToolUploadPage() {
     }
   };
 
+  /* FILE INPUT */
   const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -140,17 +125,29 @@ export default function ToolUploadPage() {
 
     setFileError(null);
     setSelectedFile(file);
-    setFiles((prev) => [...prev, file]);
     setHasUnsavedWork(true);
   };
 
+  /* CONFIRMED RESET / CLEAR TOOL */
   const handleRemoveFile = () => {
+    const confirmed = window.confirm(
+      "This will remove your uploaded file and reset the tool. Do you want to continue?"
+    );
+
+    if (!confirmed) return;
+
     setSelectedFile(null);
     setPersistedFileMeta(null);
+    setFileError(null);
     clearToolState(toolId);
     setHasUnsavedWork(false);
+
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
   };
 
+  /* PROCESS FILE */
   const handleProcessFile = async () => {
     if (!selectedFile) return;
 
@@ -182,6 +179,7 @@ export default function ToolUploadPage() {
     router.push("/dashboard");
   };
 
+  /* PDF TOOLS PAGE */
   if (toolId === "pdf-tools") {
     return (
       <div className="min-h-screen flex flex-col">
@@ -201,35 +199,106 @@ export default function ToolUploadPage() {
     );
   }
 
+  /* UPLOAD PAGE */
   return (
     <div className="min-h-screen flex flex-col">
       <main className="container mx-auto px-6 py-12 md:px-12">
-        <button onClick={handleBackNavigation} className="inline-flex items-center gap-2 text-sm mb-6">
+        <button
+          onClick={handleBackNavigation}
+          className="inline-flex items-center gap-2 text-sm mb-6"
+        >
           <ArrowLeft className="w-4 h-4" />
           Back to Dashboard
         </button>
 
         <h1 className="text-3xl font-semibold mb-8">Upload your file</h1>
 
-        {selectedFile && toolId === "pdf-compress" && (
-          <div className="border rounded-lg p-4 bg-gray-50">
-            <p className="font-medium mb-3">Compression Level</p>
+        <motion.div
+          onClick={() => fileInputRef.current?.click()}
+          onDragOver={(e) => {
+            e.preventDefault();
+            setIsDraggingOver(true);
+          }}
+          onDragLeave={() => setIsDraggingOver(false)}
+          className={`border-2 border-dashed rounded-xl p-20 text-center cursor-pointer ${
+            isDraggingOver
+              ? "border-blue-500 bg-blue-50"
+              : "hover:border-gray-400 hover:bg-gray-50"
+          }`}
+        >
+          <Upload className="mx-auto mb-4" />
+          <p>
+            {persistedFileMeta
+              ? `Previously selected: ${persistedFileMeta.name}`
+              : "Drag & drop or click to browse"}
+          </p>
+          <input
+            ref={fileInputRef}
+            type="file"
+            className="hidden"
+            accept={getSupportedTypes().join(",")}
+            onChange={handleFile}
+          />
+        </motion.div>
 
-            <div className="space-y-2 text-sm">
-              {(["low", "medium", "high"] as const).map((level) => (
-                <label key={level} className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="radio"
-                    checked={compressionLevel === level}
-                    onChange={() => setCompressionLevel(level)}
-                    className="accent-blue-600"
-                  />
-                  {level.charAt(0).toUpperCase() + level.slice(1)} Compression
-                </label>
-              ))}
+        {selectedFile && (
+          <div className="mt-6 space-y-4">
+            <div className="flex items-center gap-3 p-4 rounded-xl border bg-white shadow-sm">
+              <FileText className="w-8 h-8 text-blue-500" />
+
+              <div className="flex-1">
+                <p className="font-medium">{selectedFile.name}</p>
+                <p className="text-sm text-gray-500">
+                  {(selectedFile.size / 1024 / 1024).toFixed(2)} MB
+                </p>
+              </div>
+
+              <button
+                onClick={handleRemoveFile}
+                className="flex items-center gap-2 px-3.5 py-2 text-sm font-medium text-red-600 border border-red-200 rounded-lg hover:bg-red-50"
+              >
+                <Trash2 className="w-4 h-4" />
+                Clear All
+              </button>
             </div>
+
+            {toolId === "pdf-compress" && (
+              <div className="border rounded-lg p-4 bg-gray-50">
+                <p className="font-medium mb-3">Compression Level</p>
+                <div className="space-y-2 text-sm">
+                  {(["low", "medium", "high"] as const).map((level) => (
+                    <label key={level} className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="radio"
+                        checked={compressionLevel === level}
+                        onChange={() => setCompressionLevel(level)}
+                        className="accent-blue-600"
+                      />
+                      {level.charAt(0).toUpperCase() + level.slice(1)} Compression
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <button
+              onClick={handleProcessFile}
+              disabled={isProcessing}
+              className="px-5 py-2.5 bg-black text-white rounded-lg flex items-center gap-2 disabled:opacity-60"
+            >
+              {isProcessing ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Processing...
+                </>
+              ) : (
+                "Process File"
+              )}
+            </button>
           </div>
         )}
+
+        {fileError && <p className="mt-3 text-sm text-red-600">{fileError}</p>}
       </main>
     </div>
   );
