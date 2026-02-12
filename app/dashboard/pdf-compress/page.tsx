@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { PDFDocument } from 'pdf-lib';
 import { FileUp, Download, Loader2, FileText } from 'lucide-react';
 
@@ -11,6 +11,24 @@ export default function PdfCompressPage() {
   const [originalSize, setOriginalSize] = useState<number | null>(null);
   const [compressedSize, setCompressedSize] = useState<number | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const prevPreviewUrlRef = useRef<string | null>(null);
+
+  // Revoke previous URL when previewUrl changes or on unmount
+  useEffect(() => {
+    // Revoke the previous URL if it exists
+    if (prevPreviewUrlRef.current && prevPreviewUrlRef.current !== previewUrl) {
+      URL.revokeObjectURL(prevPreviewUrlRef.current);
+    }
+    // Update the ref to current URL
+    prevPreviewUrlRef.current = previewUrl;
+
+    // Cleanup on unmount
+    return () => {
+      if (prevPreviewUrlRef.current) {
+        URL.revokeObjectURL(prevPreviewUrlRef.current);
+      }
+    };
+  }, [previewUrl]);
 
   // ✅ NEW — Compression Level State (Default Medium)
   const [compressionLevel, setCompressionLevel] = useState<

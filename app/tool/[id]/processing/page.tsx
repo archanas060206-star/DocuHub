@@ -23,6 +23,8 @@ export default function ProcessingPage() {
   const [progress, setProgress] = useState(0);
   const [extractedText, setExtractedText] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
+  const [copied, setCopied] = useState(false);
+  const [compressedPdfData, setCompressedPdfData] = useState<string | null>(null);
 
   /* --------------------------------------------------
      INIT
@@ -139,11 +141,8 @@ export default function ProcessingPage() {
     setStatus("processing");
     setProgress(20);
 
-    try {
-      // Remove data URL prefix if present
-      const cleanedBase64 = base64Data.includes(",")
-        ? base64Data.split(",")[1]
-        : base64Data;
+    // Store the base64 data instead of object URL
+    setCompressedPdfData(data.file);
 
       const pdfBytes = Uint8Array.from(
         atob(cleanedBase64),
@@ -207,16 +206,46 @@ export default function ProcessingPage() {
   if (status === "done") {
     return (
       <div className="min-h-screen bg-[#eef6f5] py-12">
-        <div className="container mx-auto px-6 max-w-3xl text-center">
-          <CheckCircle className="h-12 w-12 text-green-500 mx-auto mb-4" />
+        <div className="container mx-auto px-6 max-w-3xl">
+          <div className="text-center mb-8">
+            <CheckCircle className="h-12 w-12 text-green-500 mx-auto mb-4" />
+            <h2 className="text-2xl font-semibold text-[#1e1e2e] mb-2">
+              {toolId === "pdf-compress"
+                ? "PDF Compressed Successfully!"
+                : "Text Extracted Successfully!"}
+            </h2>
 
-          <h2 className="text-2xl font-semibold mb-6">
-            {toolId === "pdf-compress"
-              ? "PDF Compressed Successfully!"
-              : toolId === "pdf-protect"
-              ? "PDF Protected Successfully!"
-              : "Completed Successfully!"}
-          </h2>
+          </div>
+
+          {/* Actions */}
+          <div className="flex justify-center gap-4 mb-6">
+            <button
+              onClick={handleCopyText}
+              className="flex items-center gap-2 px-4 py-2 bg-white border rounded-lg hover:bg-gray-50"
+            >
+              <Copy className="w-4 h-4" />
+              {copied ? "Copied!" : "Copy Text"}
+            </button>
+
+            {toolId === "pdf-compress" ? (
+            <button
+  onClick={() => {
+  if (compressedPdfData) {
+    const blob = new Blob(
+      [Uint8Array.from(atob(compressedPdfData), c => c.charCodeAt(0))],
+      { type: "application/pdf" }
+    );
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "compressed.pdf";
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+}}
+
+  className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
+>
 
           {toolId === "pdf-compress" && (
             <button
