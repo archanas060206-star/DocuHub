@@ -9,7 +9,7 @@ import {
 } from "lucide-react";
 
 import { ToolCard } from "@/components/ToolCard";
-import { PDF_TOOLS } from "@/lib/pdfTools"; // ✅ LOCKED TOOLS SOURCE
+import { PDF_TOOLS } from "@/lib/pdfTools"; // ✅ LOCKED SOURCE
 import { useRouter, useParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
@@ -36,6 +36,10 @@ export default function ToolUploadPage() {
   const [isDraggingOver, setIsDraggingOver] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [hasUnsavedWork, setHasUnsavedWork] = useState(false);
+  const [password, setPassword] = useState("");
+  const [compressionLevel, setCompressionLevel] = useState<
+    "low" | "medium" | "high"
+  >("medium");
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -45,22 +49,14 @@ export default function ToolUploadPage() {
     type: string;
   } | null>(null);
 
-  const [compressionLevel, setCompressionLevel] = useState<
-    "low" | "medium" | "high"
-  >("medium");
-
-  /* --------------------------------------------
-     Restore persisted state
-  --------------------------------------------- */
+  /* ---------------- Restore persisted state ---------------- */
   useEffect(() => {
     if (!toolId) return;
     const stored = loadToolState(toolId);
     if (stored?.fileMeta) setPersistedFileMeta(stored.fileMeta);
   }, [toolId]);
 
-  /* --------------------------------------------
-     Persist state
-  --------------------------------------------- */
+  /* ---------------- Persist state ---------------- */
   useEffect(() => {
     if (!toolId || !selectedFile) return;
 
@@ -73,9 +69,7 @@ export default function ToolUploadPage() {
     });
   }, [toolId, selectedFile]);
 
-  /* --------------------------------------------
-     Warn before refresh
-  --------------------------------------------- */
+  /* ---------------- Warn before refresh ---------------- */
   useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
       if (!hasUnsavedWork) return;
@@ -95,17 +89,15 @@ export default function ToolUploadPage() {
       case "pdf-merge":
       case "pdf-split":
       case "pdf-protect":
-      case "pdf-redact":
       case "pdf-compress":
+      case "pdf-redact":
         return [".pdf"];
       default:
         return [];
     }
   };
 
-  /* --------------------------------------------
-     Handle file select
-  --------------------------------------------- */
+  /* ---------------- Handle file select ---------------- */
   const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -119,9 +111,7 @@ export default function ToolUploadPage() {
     }
 
     if (file.size > MAX_FILE_SIZE) {
-      setFileError(
-        `File too large (${(file.size / 1024 / 1024).toFixed(1)}MB). Max 10MB.`
-      );
+      setFileError("File too large. Max size is 10MB.");
       return;
     }
 
@@ -130,34 +120,45 @@ export default function ToolUploadPage() {
     setHasUnsavedWork(true);
   };
 
-  /* --------------------------------------------
-     Remove file
-  --------------------------------------------- */
+  /* ---------------- Remove file ---------------- */
   const handleRemoveFile = () => {
     const confirmed = window.confirm(
-      "This will remove your uploaded file and reset the tool. Continue?"
+      "This will remove your uploaded file. Continue?"
     );
     if (!confirmed) return;
 
     setSelectedFile(null);
     setPersistedFileMeta(null);
     setFileError(null);
+    setPassword("");
     clearToolState(toolId);
     setHasUnsavedWork(false);
 
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
-  /* --------------------------------------------
-     Process file
-  --------------------------------------------- */
+  /* ---------------- Replace file ---------------- */
+  const handleReplaceFile = () => {
+    fileInputRef.current?.click();
+  };
+
+  /* ---------------- Process file ---------------- */
   const handleProcessFile = async () => {
     if (!selectedFile) return;
+
+    if (toolId === "pdf-protect" && !password.trim()) {
+      setFileError("Please enter a password to protect the PDF.");
+      return;
+    }
 
     setIsProcessing(true);
 
     try {
-      const ok = await storeFile(selectedFile);
+      const ok = await storeFile(selectedFile, {
+        password: toolId === "pdf-protect" ? password : undefined,
+        compressionLevel:
+          toolId === "pdf-compress" ? compressionLevel : undefined,
+      });
 
       if (ok) {
         clearToolState(toolId);
@@ -182,17 +183,13 @@ export default function ToolUploadPage() {
     router.push("/dashboard");
   };
 
-  /* --------------------------------------------
-     PDF TOOLS PAGE (LOCKED LIST)
-  --------------------------------------------- */
+  /* ================= PDF TOOLS PAGE (LOCKED) ================= */
   if (toolId === "pdf-tools") {
     return (
       <div className="min-h-screen flex flex-col">
         <main className="container mx-auto px-6 py-12 md:px-12">
           <h1 className="text-3xl font-semibold mb-2">PDF Tools</h1>
-          <p className="text-muted-foreground mb-12">
-            Choose a PDF tool
-          </p>
+          <p className="text-muted-foreground mb-12">Choose a PDF tool</p>
 
           <div className="grid gap-6 md:grid-cols-2 max-w-5xl">
             {PDF_TOOLS.map((tool) => (
@@ -210,9 +207,7 @@ export default function ToolUploadPage() {
     );
   }
 
-  /* --------------------------------------------
-     UPLOAD PAGE
-  --------------------------------------------- */
+  /* ================= UPLOAD PAGE ================= */
   return (
     <div className="min-h-screen flex flex-col">
       <main className="container mx-auto px-6 py-12 md:px-12">
@@ -224,9 +219,7 @@ export default function ToolUploadPage() {
           Back to Dashboard
         </button>
 
-        <h1 className="text-3xl font-semibold mb-8">
-          Upload your file
-        </h1>
+        <h1 className="text-3xl font-semibold mb-8">Upload your file</h1>
 
         <motion.div
           onClick={() => fileInputRef.current?.click()}
@@ -235,7 +228,7 @@ export default function ToolUploadPage() {
             setIsDraggingOver(true);
           }}
           onDragLeave={() => setIsDraggingOver(false)}
-          className={`border-2 border-dashed rounded-xl p-20 text-center cursor-pointer transition ${
+          className={`border-2 border-dashed rounded-xl p-20 text-center cursor-pointer ${
             isDraggingOver
               ? "border-blue-500 bg-blue-50"
               : "hover:border-gray-400 hover:bg-gray-50"
@@ -256,12 +249,16 @@ export default function ToolUploadPage() {
           />
         </motion.div>
 
+        {!selectedFile && (
+          <p className="mt-6 text-sm text-muted-foreground text-center">
+            No file selected. Upload a file to continue.
+          </p>
+        )}
+
         {selectedFile && (
           <div className="mt-6 space-y-4">
-
             <div className="flex items-center gap-3 p-4 rounded-xl border bg-white shadow-sm">
               <FileText className="w-8 h-8 text-blue-500" />
-
               <div className="flex-1">
                 <p className="font-medium">{selectedFile.name}</p>
                 <p className="text-sm text-gray-500">
@@ -270,17 +267,48 @@ export default function ToolUploadPage() {
               </div>
 
               <button
-                onClick={handleRemoveFile}
-                className="flex items-center gap-2 px-3.5 py-2 text-sm font-medium text-red-600 border border-red-200 rounded-lg hover:bg-red-50"
+                onClick={handleReplaceFile}
+                className="text-sm text-blue-600 hover:underline"
               >
-                <Trash2 className="w-4 h-4" />
+                Replace
+              </button>
+
+              <button
+                onClick={handleRemoveFile}
+                className="text-sm text-red-600 hover:underline"
+              >
                 Remove
               </button>
             </div>
 
-            {isProcessing && (
-              <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
-                <div className="h-full bg-blue-600 animate-pulse w-full" />
+            {toolId === "pdf-protect" && (
+              <div className="border rounded-lg p-4 bg-gray-50">
+                <label className="block text-sm font-medium mb-2">
+                  Enter Password
+                </label>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full border rounded-lg px-3 py-2 text-sm"
+                />
+              </div>
+            )}
+
+            {toolId === "pdf-compress" && (
+              <div className="border rounded-lg p-4 bg-gray-50">
+                <p className="font-medium mb-3">Compression Level</p>
+                {(["low", "medium", "high"] as const).map((level) => (
+                  <label key={level} className="block text-sm">
+                    <input
+                      type="radio"
+                      checked={compressionLevel === level}
+                      onChange={() => setCompressionLevel(level)}
+                      className="mr-2"
+                    />
+                    {level}
+                  </label>
+                ))}
               </div>
             )}
 
@@ -302,9 +330,7 @@ export default function ToolUploadPage() {
         )}
 
         {fileError && (
-          <p className="mt-3 text-sm text-red-600">
-            {fileError}
-          </p>
+          <p className="mt-3 text-sm text-red-600">{fileError}</p>
         )}
       </main>
     </div>
