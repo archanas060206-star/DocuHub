@@ -6,11 +6,15 @@ import { ToolCard } from "@/components/ToolCard";
 import { FileText, Upload } from "lucide-react";
 import { useRouter, useParams } from "next/navigation";
 import { motion } from "framer-motion";
+import { useState } from "react";
+
 
 export default function ToolUploadPage() {
     const router = useRouter();
     const params = useParams();
     const toolId = params.id;
+    const [selectedFile, setSelectedFile] = useState<File | null>(null);
+
     const getToolTitle = () => {
         switch (toolId) {
             case "file-conversion":
@@ -23,6 +27,15 @@ export default function ToolUploadPage() {
                 return "Upload your file";
         }
     };
+const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const file = e.target.files?.[0];
+  if (!file) return;
+
+  setSelectedFile(file);
+};
+const handleRemoveFile = () => {
+  setSelectedFile(null);
+};
 
 
 
@@ -138,6 +151,28 @@ export default function ToolUploadPage() {
                             />
                         </label>
                     </motion.div>
+
+
+{selectedFile ? (
+  <div className="mt-6 flex items-center justify-center gap-4">
+    <p className="text-sm font-medium">
+      Selected file: {selectedFile.name}
+    </p>
+
+    <button
+      onClick={handleRemoveFile}
+      className="text-sm text-red-500 hover:underline"
+    >
+      Remove
+    </button>
+  </div>
+) : (
+  <p className="mt-6 text-sm text-muted-foreground text-center">
+    No file selected. Upload a file to continue.
+  </p>
+)}
+
+
 
                     <div className="flex justify-between text-xs text-muted-foreground mt-4 px-1">
                         <span>Supported formats: PDF, JPG, PNG</span>
