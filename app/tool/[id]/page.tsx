@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import {
   ArrowLeft,
   Upload,
@@ -40,6 +39,11 @@ export default function ToolUploadPage() {
   const [isDraggingOver, setIsDraggingOver] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [hasUnsavedWork, setHasUnsavedWork] = useState(false);
+  const [password, setPassword] = useState("");
+
+  const [compressionLevel, setCompressionLevel] = useState<
+    "low" | "medium" | "high"
+  >("medium");
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -48,10 +52,6 @@ export default function ToolUploadPage() {
     size: number;
     type: string;
   } | null>(null);
-
-  const [compressionLevel, setCompressionLevel] = useState<
-    "low" | "medium" | "high"
-  >("medium");
 
   /* Restore persisted state */
   useEffect(() => {
@@ -93,7 +93,6 @@ export default function ToolUploadPage() {
       case "pdf-merge":
       case "pdf-split":
       case "pdf-protect":
-      case "pdf-redact":
       case "pdf-compress":
         return [".pdf"];
       default:
@@ -115,9 +114,7 @@ export default function ToolUploadPage() {
     }
 
     if (file.size > MAX_FILE_SIZE) {
-      setFileError(
-        `File too large (${(file.size / 1024 / 1024).toFixed(1)}MB). Max 10MB.`
-      );
+      setFileError("File too large. Max size is 10MB.");
       return;
     }
 
@@ -126,23 +123,24 @@ export default function ToolUploadPage() {
     setHasUnsavedWork(true);
   };
 
-  /* Remove file (with confirm) */
+  /* Remove file */
   const handleRemoveFile = () => {
     const confirmed = window.confirm(
-      "This will remove your uploaded file and reset the tool. Continue?"
+      "This will remove your uploaded file. Continue?"
     );
     if (!confirmed) return;
 
     setSelectedFile(null);
     setPersistedFileMeta(null);
     setFileError(null);
+    setPassword("");
     clearToolState(toolId);
     setHasUnsavedWork(false);
 
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
-  /* ✅ Replace file (NEW FEATURE) */
+  /* Replace file */
   const handleReplaceFile = () => {
     fileInputRef.current?.click();
   };
@@ -151,10 +149,19 @@ export default function ToolUploadPage() {
   const handleProcessFile = async () => {
     if (!selectedFile) return;
 
+    if (toolId === "pdf-protect" && !password.trim()) {
+      setFileError("Please enter a password to protect the PDF.");
+      return;
+    }
+
     setIsProcessing(true);
 
     try {
-      const ok = await storeFile(selectedFile);
+      const ok = await storeFile(selectedFile, {
+        password: toolId === "pdf-protect" ? password : undefined,
+        compressionLevel:
+          toolId === "pdf-compress" ? compressionLevel : undefined,
+      });
 
       if (ok) {
         clearToolState(toolId);
@@ -191,7 +198,7 @@ export default function ToolUploadPage() {
             <ToolCard icon={Combine} title="Merge PDF" description="Combine PDFs" href="/dashboard/pdf-merge" />
             <ToolCard icon={Minimize2} title="Compress PDF" description="Reduce file size" href="/tool/pdf-compress" />
             <ToolCard icon={Scissors} title="Split PDF" description="Split pages" href="/dashboard/pdf-split" />
-            <ToolCard icon={FileText} title="Protect PDF" description="Add password" href="/tool/pdf-protect" />
+            <ToolCard icon={FileText} title="Protect PDF" description="Add password protection" href="/tool/pdf-protect" />
             <ToolCard icon={FileUp} title="Document to PDF" description="Convert to PDF" href="/dashboard/document-to-pdf" />
           </div>
         </main>
@@ -220,7 +227,7 @@ export default function ToolUploadPage() {
             setIsDraggingOver(true);
           }}
           onDragLeave={() => setIsDraggingOver(false)}
-          className={`border-2 border-dashed rounded-xl p-20 text-center cursor-pointer transition ${
+          className={`border-2 border-dashed rounded-xl p-20 text-center cursor-pointer ${
             isDraggingOver
               ? "border-blue-500 bg-blue-50"
               : "hover:border-gray-400 hover:bg-gray-50"
@@ -241,11 +248,17 @@ export default function ToolUploadPage() {
           />
         </motion.div>
 
+        {/* Empty-state hint */}
+        {!selectedFile && (
+          <p className="mt-6 text-sm text-muted-foreground text-center">
+            No file selected. Upload a file to continue.
+          </p>
+        )}
+
         {selectedFile && (
           <div className="mt-6 space-y-4">
             <div className="flex items-center gap-3 p-4 rounded-xl border bg-white shadow-sm">
               <FileText className="w-8 h-8 text-blue-500" />
-
               <div className="flex-1">
                 <p className="font-medium">{selectedFile.name}</p>
                 <p className="text-sm text-gray-500">
@@ -254,20 +267,33 @@ export default function ToolUploadPage() {
               </div>
 
               <button
-                onClick={handleRemoveFile}
-                className="flex items-center gap-2 px-3.5 py-2 text-sm font-medium text-red-600 border border-red-200 rounded-lg hover:bg-red-50"
+                onClick={handleReplaceFile}
+                className="text-sm text-blue-600 hover:underline"
               >
-                <Trash2 className="w-4 h-4" />
-                Remove
+                Replace
               </button>
 
               <button
-                onClick={handleReplaceFile}
-                className="flex items-center gap-2 px-3.5 py-2 text-sm font-medium text-blue-600 border border-blue-200 rounded-lg hover:bg-blue-50"
+                onClick={handleRemoveFile}
+                className="text-sm text-red-600 hover:underline"
               >
-                Replace File
+                Remove
               </button>
             </div>
+
+            {toolId === "pdf-protect" && (
+              <div className="border rounded-lg p-4 bg-gray-50">
+                <label className="block text-sm font-medium mb-2">
+                  Enter Password
+                </label>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full border rounded-lg px-3 py-2 text-sm"
+                />
+              </div>
+            )}
 
             <button
               onClick={handleProcessFile}
