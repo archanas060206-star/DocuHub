@@ -1,6 +1,6 @@
 "use client";
-import { Minimize2, X } from "lucide-react";
 
+import Link from "next/link";
 import {
   ArrowLeft,
   Upload,
@@ -9,13 +9,21 @@ import {
   FileUp,
   Loader2,
   FileText,
+  Minimize2,
+  X,
 } from "lucide-react";
 
 import { ToolCard } from "@/components/ToolCard";
 import { useRouter, useParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
+
 import { storeFile } from "@/lib/fileStore";
+import {
+  saveToolState,
+  loadToolState,
+  clearToolState,
+} from "@/lib/toolStateStorage";
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 
@@ -34,46 +42,34 @@ export default function ToolUploadPage() {
   const [isProcessing, setIsProcessing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  const [files, setFiles] = useState<File[]>([]);
-  const [pendingDuplicate, setPendingDuplicate] = useState<File | null>(null);
+  const [persistedFileMeta, setPersistedFileMeta] = useState<{
+    name: string;
+    size: number;
+    type: string;
+  } | null>(null);
 
-  /* --------------------------------------------
-     Remember last-used tool + recent tools + usage count
-  --------------------------------------------- */
+  /* Restore persisted state */
   useEffect(() => {
-    if (toolId && toolId !== "pdf-tools") {
-      localStorage.setItem("lastUsedTool", toolId);
-      localStorage.removeItem("hideResume");
-
-      const existing = JSON.parse(
-        localStorage.getItem("recentTools") || "[]"
-      );
-
-      const updated = [
-        toolId,
-        ...existing.filter((t: string) => t !== toolId),
-      ].slice(0, 5);
-
-      localStorage.setItem("recentTools", JSON.stringify(updated));
-
-      const sessionKey = `counted_${toolId}`;
-
-      if (!sessionStorage.getItem(sessionKey)) {
-        const usageCounts = JSON.parse(
-          localStorage.getItem("toolUsageCounts") || "{}"
-        );
-
-        usageCounts[toolId] = (usageCounts[toolId] || 0) + 1;
-
-        localStorage.setItem(
-          "toolUsageCounts",
-          JSON.stringify(usageCounts)
-        );
-
-        sessionStorage.setItem(sessionKey, "true");
-      }
+    if (!toolId) return;
+    const stored = loadToolState(toolId);
+    if (stored?.fileMeta) {
+      setPersistedFileMeta(stored.fileMeta);
     }
   }, [toolId]);
+
+  /* Persist state */
+  useEffect(() => {
+    if (!toolId) return;
+    if (selectedFile) {
+      saveToolState(toolId, {
+        fileMeta: {
+          name: selectedFile.name,
+          size: selectedFile.size,
+          type: selectedFile.type,
+        },
+      });
+    }
+  }, [toolId, selectedFile]);
 
   /* Warn before refresh */
   useEffect(() => {
@@ -82,7 +78,6 @@ export default function ToolUploadPage() {
       e.preventDefault();
       e.returnValue = "";
     };
-
     window.addEventListener("beforeunload", handleBeforeUnload);
     return () =>
       window.removeEventListener("beforeunload", handleBeforeUnload);
@@ -96,58 +91,17 @@ export default function ToolUploadPage() {
       case "pdf-split":
       case "pdf-protect":
       case "pdf-redact":
+      case "pdf-compress":
         return [".pdf"];
       default:
         return [];
     }
   };
 
-  /* FILE INPUT */
   const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const isDuplicate = files.some(
-      (f) => f.name === file.name && f.size === file.size
-    );
-
-    if (isDuplicate) {
-      setPendingDuplicate(file);
-      e.target.value = "";
-      return;
-    }
-
-    const allowed = getSupportedTypes();
-    const ext = "." + file.name.split(".").pop()?.toLowerCase();
-
-    if (allowed.length && !allowed.includes(ext)) {
-      setFileError(`Unsupported file type. Allowed: ${allowed.join(", ")}`);
-      e.target.value = "";
-      return;
-    }
-
-    if (file.size > MAX_FILE_SIZE) {
-      setFileError(
-        `File too large (${(file.size / 1024 / 1024).toFixed(1)}MB). Max 10MB.`
-      );
-      e.target.value = "";
-      return;
-    }
-
-    setFileError(null);
-    setSelectedFile(file);
-    setFiles((prev) => [...prev, file]);
-    setHasUnsavedWork(true);
-  };
-
-  /* DRAG DROP */
-  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    setIsDraggingOver(false);
-
-    const file = e.dataTransfer.files?.[0];
-    if (!file) return;
-
     const allowed = getSupportedTypes();
     const ext = "." + file.name.split(".").pop()?.toLowerCase();
 
@@ -158,21 +112,23 @@ export default function ToolUploadPage() {
 
     if (file.size > MAX_FILE_SIZE) {
       setFileError(
-        `File too large (${(file.size / 1024 / 1024).toFixed(1)}MB). Max 10MB.`
+        `File too large (${(file.size / 1024 / 1024).toFixed(
+          1
+        )}MB). Max 10MB.`
       );
       return;
     }
 
     setFileError(null);
     setSelectedFile(file);
-    setFiles((prev) => [...prev, file]);
     setHasUnsavedWork(true);
   };
 
   /* REMOVE FILE */
   const handleRemoveFile = () => {
     setSelectedFile(null);
-    setFiles([]);
+    setPersistedFileMeta(null);
+    clearToolState(toolId);
     setHasUnsavedWork(false);
   };
 
@@ -186,6 +142,7 @@ export default function ToolUploadPage() {
       const ok = await storeFile(selectedFile);
 
       if (ok) {
+        clearToolState(toolId);
         router.push(`/tool/${toolId}/processing`);
       } else {
         setFileError("Failed to process file.");
@@ -197,16 +154,6 @@ export default function ToolUploadPage() {
     }
   };
 
-  const handleBackNavigation = () => {
-    if (hasUnsavedWork) {
-      const confirmLeave = window.confirm(
-        "You have unsaved work. Are you sure you want to leave?"
-      );
-      if (!confirmLeave) return;
-    }
-    router.push("/dashboard");
-  };
-
   /* PDF TOOLS PAGE */
   if (toolId === "pdf-tools") {
     return (
@@ -215,52 +162,43 @@ export default function ToolUploadPage() {
           <h1 className="text-3xl font-semibold mb-2">PDF Tools</h1>
           <p className="text-muted-foreground mb-12">Choose a PDF tool</p>
 
-<div className="grid gap-6 md:grid-cols-2 max-w-5xl">
-
-  <ToolCard
-    icon={Combine}
-    title="Merge PDF"
-    description="Combine multiple PDFs"
-    href="/dashboard/pdf-merge"
-  />
-
-  <ToolCard
-    icon={Minimize2}
-    title="Compress PDF"
-    description="Reduce PDF file size"
-    href="/tool/pdf-compress"
-  />
-
-  <ToolCard
-    icon={Scissors}
-    title="Split PDF"
-    description="Split PDF pages"
-    href="/dashboard/pdf-split"
-  />
-
-  <ToolCard
-    icon={FileText}
-    title="Redact PDF"
-    description="Securely hide sensitive information"
-    href="/tool/pdf-redact"
-  />
-
-  <ToolCard
-    icon={FileText}
-    title="Protect PDF"
-    description="Add password protection to PDF"
-    href="/tool/pdf-protect"
-  />
-
-  <ToolCard
-    icon={FileUp}
-    title="Document to PDF"
-    description="Convert documents to PDF"
-    href="/dashboard/document-to-pdf"
-  />
-
-</div>
-
+          <div className="grid gap-6 md:grid-cols-2 max-w-5xl">
+            <ToolCard
+              icon={Combine}
+              title="Merge PDF"
+              description="Combine multiple PDFs"
+              href="/dashboard/pdf-merge"
+            />
+            <ToolCard
+              icon={Minimize2}
+              title="Compress PDF"
+              description="Reduce PDF file size"
+              href="/tool/pdf-compress"
+            />
+            <ToolCard
+              icon={Scissors}
+              title="Split PDF"
+              description="Split PDF pages"
+              href="/dashboard/pdf-split"
+            />
+            <ToolCard
+              icon={FileText}
+              title="Redact PDF"
+              description="Securely hide sensitive information"
+              href="/tool/pdf-redact"
+            />
+            <ToolCard
+              icon={FileText}
+              title="Protect PDF"
+              description="Add password protection to PDF"
+              href="/tool/pdf-protect"
+            />
+            <ToolCard
+              icon={FileUp}
+              title="Document to PDF"
+              description="Convert documents to PDF"
+              href="/dashboard/document-to-pdf"
+            />
           </div>
         </main>
       </div>
@@ -271,13 +209,13 @@ export default function ToolUploadPage() {
   return (
     <div className="min-h-screen flex flex-col">
       <main className="container mx-auto px-6 py-12 md:px-12">
-        <button
-          onClick={handleBackNavigation}
+        <Link
+          href="/dashboard"
           className="inline-flex items-center gap-2 text-sm mb-6"
         >
           <ArrowLeft className="w-4 h-4" />
           Back to Dashboard
-        </button>
+        </Link>
 
         <h1 className="text-3xl font-semibold mb-8">Upload your file</h1>
 
@@ -290,15 +228,18 @@ export default function ToolUploadPage() {
             setIsDraggingOver(true);
           }}
           onDragLeave={() => setIsDraggingOver(false)}
-          onDrop={handleDrop}
-          className={`border-2 border-dashed rounded-xl p-20 text-center cursor-pointer transition ${
+          className={`border-2 border-dashed rounded-xl p-20 text-center cursor-pointer ${
             isDraggingOver
               ? "border-blue-500 bg-blue-50"
               : "hover:border-gray-400 hover:bg-gray-50"
           }`}
         >
           <Upload className="mx-auto mb-4" />
-          <p>Drag & drop or click to browse</p>
+          <p>
+            {persistedFileMeta
+              ? `Previously selected: ${persistedFileMeta.name}`
+              : "Drag & drop or click to browse"}
+          </p>
           <input
             ref={fileInputRef}
             type="file"
@@ -309,89 +250,43 @@ export default function ToolUploadPage() {
         </motion.div>
 
         {selectedFile && (
-<div className="mt-6 space-y-4">
+          <div className="mt-6 space-y-4">
+            <div className="flex items-center gap-3 p-4 rounded-xl border bg-white shadow-sm">
+              <FileText className="w-8 h-8 text-blue-500" />
 
-  {/* File Preview */}
-  <div className="flex items-center gap-3 p-4 rounded-xl border bg-white shadow-sm">
-    <FileText className="w-8 h-8 text-blue-500" />
+              <div className="flex-1">
+                <p className="font-medium text-gray-900">
+                  {selectedFile.name}
+                </p>
+                <p className="text-sm text-gray-500">
+                  {(selectedFile.size / 1024 / 1024).toFixed(2)} MB
+                </p>
+              </div>
 
-    <div className="flex-1">
-      <p className="font-medium text-gray-900">{selectedFile.name}</p>
-      <p className="text-sm text-gray-500">
-        {(selectedFile.size / 1024 / 1024).toFixed(2)} MB
-      </p>
-    </div>
+              <button
+                onClick={handleRemoveFile}
+                className="flex items-center gap-2 px-3 py-1.5 text-sm text-red-600 border border-red-200 rounded-lg hover:bg-red-50 transition"
+              >
+                <X className="w-4 h-4" />
+                Remove
+              </button>
 
-    <button
-      onClick={handleRemoveFile}
-      className="p-2 hover:bg-red-50 rounded-lg transition"
-    >
-      <X className="w-5 h-5 text-red-500" />
-    </button>
-
-    {isProcessing && (
-      <Loader2 className="w-5 h-5 animate-spin text-blue-500" />
-    )}
-  </div>
-
-  {/* Compression Dropdown */}
-  {toolId === "pdf-compress" && (
-    <div className="space-y-3">
-
-      <p className="text-sm font-medium">Target Compression:</p>
-
-      <select
-        className="border rounded px-3 py-2 w-60"
-        defaultValue="1MB"
-        onChange={(e) =>
-          localStorage.setItem("targetSize", e.target.value)
-        }
-      >
-        <optgroup label="KB Options">
-          <option value="500KB">Compress to ~500 KB</option>
-          <option value="300KB">Compress to ~300 KB</option>
-          <option value="200KB">Compress to ~200 KB</option>
-          <option value="100KB">Compress to ~100 KB</option>
-        </optgroup>
-
-        <optgroup label="MB Options">
-          <option value="1MB">Compress to ~1 MB</option>
-          <option value="2MB">Compress to ~2 MB</option>
-          <option value="5MB">Compress to ~5 MB</option>
-          <option value="10MB">Compress to ~10 MB</option>
-          <option value="20MB">Compress to ~20 MB</option>
-        </optgroup>
-      </select>
-
-      <p className="text-xs text-gray-500">
-        After processing you will see:
-        • Original size  
-        • Target size  
-        • Final compressed size  
-        • Percentage reduction
-      </p>
-
-    </div>
-  )}
-
-</div>
-
+              {isProcessing && (
+                <Loader2 className="w-5 h-5 animate-spin text-blue-500" />
+              )}
+            </div>
 
             <button
               onClick={handleProcessFile}
               disabled={isProcessing}
-              className="px-5 py-2.5 bg-black text-white rounded-lg flex items-center gap-2 disabled:opacity-60"
+              className="px-4 py-2 bg-black text-white rounded flex items-center gap-2"
             >
               {isProcessing ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Processing...
-                </>
+                <Loader2 className="animate-spin" />
               ) : (
                 "Process File"
               )}
             </button>
-
           </div>
         )}
 
@@ -402,4 +297,3 @@ export default function ToolUploadPage() {
     </div>
   );
 }
-
