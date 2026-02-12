@@ -1,19 +1,15 @@
 "use client";
 
-import Link from "next/link";
 import {
   ArrowLeft,
   Upload,
-  Combine,
-  Scissors,
-  FileUp,
   Loader2,
   FileText,
-  Minimize2,
   Trash2,
 } from "lucide-react";
 
 import { ToolCard } from "@/components/ToolCard";
+import { PDF_TOOLS } from "@/lib/pdfTools"; // ✅ LOCKED TOOLS SOURCE
 import { useRouter, useParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
@@ -53,7 +49,6 @@ export default function ToolUploadPage() {
     "low" | "medium" | "high"
   >("medium");
 
-  /* Restore persisted state */
   /* --------------------------------------------
      Restore persisted state
   --------------------------------------------- */
@@ -63,7 +58,9 @@ export default function ToolUploadPage() {
     if (stored?.fileMeta) setPersistedFileMeta(stored.fileMeta);
   }, [toolId]);
 
-  /* Persist state */
+  /* --------------------------------------------
+     Persist state
+  --------------------------------------------- */
   useEffect(() => {
     if (!toolId || !selectedFile) return;
 
@@ -76,7 +73,9 @@ export default function ToolUploadPage() {
     });
   }, [toolId, selectedFile]);
 
-  /* Warn before refresh */
+  /* --------------------------------------------
+     Warn before refresh
+  --------------------------------------------- */
   useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
       if (!hasUnsavedWork) return;
@@ -104,7 +103,9 @@ export default function ToolUploadPage() {
     }
   };
 
-  /* Handle file select */
+  /* --------------------------------------------
+     Handle file select
+  --------------------------------------------- */
   const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -129,7 +130,9 @@ export default function ToolUploadPage() {
     setHasUnsavedWork(true);
   };
 
-  /* Clear file */
+  /* --------------------------------------------
+     Remove file
+  --------------------------------------------- */
   const handleRemoveFile = () => {
     const confirmed = window.confirm(
       "This will remove your uploaded file and reset the tool. Continue?"
@@ -145,7 +148,9 @@ export default function ToolUploadPage() {
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
-  /* Process file */
+  /* --------------------------------------------
+     Process file
+  --------------------------------------------- */
   const handleProcessFile = async () => {
     if (!selectedFile) return;
 
@@ -177,7 +182,9 @@ export default function ToolUploadPage() {
     router.push("/dashboard");
   };
 
-  /* PDF Tools Page */
+  /* --------------------------------------------
+     PDF TOOLS PAGE (LOCKED LIST)
+  --------------------------------------------- */
   if (toolId === "pdf-tools") {
     return (
       <div className="min-h-screen flex flex-col">
@@ -188,54 +195,24 @@ export default function ToolUploadPage() {
           </p>
 
           <div className="grid gap-6 md:grid-cols-2 max-w-5xl">
-            <ToolCard
-              icon={Combine}
-              title="Merge PDF"
-              description="Combine PDFs"
-              href="/dashboard/pdf-merge"
-            />
-
-            <ToolCard
-              icon={Minimize2}
-              title="Compress PDF"
-              description="Reduce file size"
-              href="/tool/pdf-compress"
-            />
-
-            <ToolCard
-              icon={Scissors}
-              title="Split PDF"
-              description="Split pages"
-              href="/dashboard/pdf-split"
-            />
-
-            <ToolCard
-              icon={FileText}
-              title="Protect PDF"
-              description="Add password"
-              href="/tool/pdf-protect"
-            />
-
-            <ToolCard
-              icon={FileText}
-              title="Metadata Viewer"
-              description="View PDF metadata details"
-              href="/dashboard/metadata-viewer"
-            />
-
-            <ToolCard
-              icon={FileUp}
-              title="Document to PDF"
-              description="Convert to PDF"
-              href="/dashboard/document-to-pdf"
-            />
+            {PDF_TOOLS.map((tool) => (
+              <ToolCard
+                key={tool.id}
+                icon={tool.icon}
+                title={tool.title}
+                description={tool.description}
+                href={tool.href}
+              />
+            ))}
           </div>
         </main>
       </div>
     );
   }
 
-  /* Upload Page */
+  /* --------------------------------------------
+     UPLOAD PAGE
+  --------------------------------------------- */
   return (
     <div className="min-h-screen flex flex-col">
       <main className="container mx-auto px-6 py-12 md:px-12">
@@ -282,7 +259,6 @@ export default function ToolUploadPage() {
         {selectedFile && (
           <div className="mt-6 space-y-4">
 
-            {/* File Preview Card */}
             <div className="flex items-center gap-3 p-4 rounded-xl border bg-white shadow-sm">
               <FileText className="w-8 h-8 text-blue-500" />
 
@@ -302,27 +278,6 @@ export default function ToolUploadPage() {
               </button>
             </div>
 
-            {/* Compression Options */}
-            {toolId === "pdf-compress" && (
-              <div className="border rounded-lg p-4 bg-gray-50">
-                <p className="font-medium mb-3">Compression Level</p>
-                <div className="space-y-2 text-sm">
-                  {(["low", "medium", "high"] as const).map((level) => (
-                    <label key={level} className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="radio"
-                        checked={compressionLevel === level}
-                        onChange={() => setCompressionLevel(level)}
-                        className="accent-blue-600"
-                      />
-                      {level.charAt(0).toUpperCase() + level.slice(1)} Compression
-                    </label>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Processing Feedback */}
             {isProcessing && (
               <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
                 <div className="h-full bg-blue-600 animate-pulse w-full" />
