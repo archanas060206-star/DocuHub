@@ -35,8 +35,8 @@ export function Header() {
 
   return (
     <header className="sticky top-0 z-50 w-full bg-background shadow-sm border-b border-border">
-      <div className="container mx-auto px-6 md:px-12 flex items-center justify-between py-6">
-
+      {/* Top Header */}
+      <div className="container mx-auto px-6 md:px-12 flex items-center justify-between pt-6 pb-4">
         {/* Logo */}
         {isHomeOrDashboard && (
           <div className="flex flex-col">
@@ -55,7 +55,7 @@ export function Header() {
         {/* Theme Toggle */}
         <button
           onClick={toggleTheme}
-          className="ml-4 p-2 rounded-lg bg-card border border-border shadow hover:scale-105 transition"
+          className="ml-4 p-2 rounded-lg bg-card border border-border shadow hover:scale-105 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
         >
           {darkMode ? (
             <Sun className="w-5 h-5 text-primary" />
@@ -66,8 +66,8 @@ export function Header() {
       </div>
 
       {/* Banner Strip */}
-      <div className="w-full bg-muted py-3 border-b border-border">
-        <div className="container mx-auto px-6 flex flex-wrap items-center justify-center gap-6 md:gap-8 text-muted-foreground font-medium text-sm md:text-base">
+      <div className="w-full bg-muted py-2.5 border-b border-border">
+        <div className="container mx-auto px-6 md:px-12 flex flex-wrap items-center justify-center gap-6 md:gap-8 text-muted-foreground font-medium text-sm md:text-base">
           <span className="flex items-center gap-2">
             <Shield className="w-4 h-4" /> 100% Client-Side
           </span>
