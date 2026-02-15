@@ -1,11 +1,6 @@
 "use client";
 
-import {
-  Loader2,
-  CheckCircle,
-  AlertCircle,
-  Copy,
-} from "lucide-react";
+import { Loader2, CheckCircle, AlertCircle, Copy } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Tesseract from "tesseract.js";
@@ -23,199 +18,218 @@ export default function ProcessingPage() {
   const params = useParams();
   const toolId = params.id as string;
 
-  const [status, setStatus] = useState<"idle" | "processing" | "done" | "error">("idle");
+  const [status, setStatus] = useState<"processing" | "done" | "error">(
+    "processing"
+  );
   const [progress, setProgress] = useState(0);
-  const [extractedText, setExtractedText] = useState("");
-  const [errorMessage, setErrorMessage] = useState("");
+  const [text, setText] = useState("");
+  const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
-  const [compressedPdfData, setCompressedPdfData] = useState<string | null>(null);
+  const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
 
+  /* ================= RUN TOOL ================= */
   useEffect(() => {
-    const storedFiles = getStoredFiles() as StoredFile[];
+    const run = async () => {
+      const stored = getStoredFiles() as StoredFile[];
 
-    if (!storedFiles.length) {
-      router.push(`/tool/${toolId}`);
-      return;
-    }
-
-    if (toolId === "ocr") {
-      runOCR(storedFiles[0].data);
-    } else if (toolId === "pdf-compress") {
-      startCompressFlow(storedFiles);
-    } else if (toolId === "pdf-protect") {
-      protectPDF(storedFiles[0].data);
-    } else {
-      setStatus("done");
-      clearStoredFiles();
-    }
-  }, [toolId, router]);
-
-  /* OCR */
-  async function runOCR(base64Data: string) {
-    setStatus("processing");
-    setProgress(0);
-
-    try {
-      const result = await Tesseract.recognize(base64Data, "eng", {
-        logger: m => {
-          if (m.status === "recognizing text") {
-            setProgress(Math.round(m.progress * 100));
-          }
-        },
-      });
-
-      setExtractedText(result.data.text);
-      setStatus("done");
-      clearStoredFiles();
-    } catch {
-      setStatus("error");
-      setErrorMessage("Failed to extract text.");
-    }
-  }
-
-  /* COMPRESS */
-  async function startCompressFlow(files: StoredFile[]) {
-    setStatus("processing");
-    setProgress(20);
-
-    try {
-      const targetSize = localStorage.getItem("targetSize") || "1MB";
-
-      const targetBytes = targetSize.includes("KB")
-        ? Number(targetSize.replace("KB", "")) * 1024
-        : Number(targetSize.replace("MB", "")) * 1024 * 1024;
-
-      const res = await fetch("/api/compress", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          files: files.map(f => ({ base64: f.data })),
-          targetBytes,
-        }),
-      });
-
-      const data = await res.json();
-
-      if (!res.ok || !data?.results?.length) {
-        throw new Error("Compression failed");
+      if (!stored.length) {
+        router.push(`/tool/${toolId}`);
+        return;
       }
 
-      setCompressedPdfData(data.results[0].file);
-      setProgress(100);
-      setStatus("done");
-      clearStoredFiles();
-    } catch {
-      setStatus("error");
-      setErrorMessage("Failed to compress PDF.");
-    }
-  }
+      try {
+        if (toolId === "ocr") await runOCR(stored[0].data);
 
-  /* PROTECT */
-  async function protectPDF(base64Data: string) {
-    setStatus("processing");
+        else if (toolId === "pdf-protect")
+          await protectPDF(stored[0].data);
+
+        else if (toolId === "jpeg-to-pdf")
+          await imageToPdf(stored[0].data, "jpg");
+
+        else if (toolId === "png-to-pdf")
+          await imageToPdf(stored[0].data, "png");
+
+        else if (toolId === "pdf-compress")
+          await startCompressFlow(stored);
+
+        else setStatus("done");
+      } catch (e) {
+        console.error(e);
+        setError("Processing failed");
+        setStatus("error");
+      } finally {
+        clearStoredFiles();
+      }
+    };
+
+    run();
+  }, [toolId, router]);
+
+  /* ================= OCR ================= */
+  const runOCR = async (base64: string) => {
+    const res = await Tesseract.recognize(base64, "eng", {
+      logger: (m) => {
+        if (m.status === "recognizing text") {
+          setProgress(Math.round(m.progress * 100));
+        }
+      },
+    });
+
+    setText(res.data.text);
+    setStatus("done");
+  };
+
+  /* ================= COMPRESS ================= */
+  const startCompressFlow = async (files: StoredFile[]) => {
     setProgress(20);
 
-    try {
-      const cleaned = base64Data.split(",")[1] || base64Data;
+    const targetSize = localStorage.getItem("targetSize") || "1MB";
 
-      const bytes = Uint8Array.from(atob(cleaned), c => c.charCodeAt(0));
+    const targetBytes = targetSize.includes("KB")
+      ? Number(targetSize.replace("KB", "")) * 1024
+      : Number(targetSize.replace("MB", "")) * 1024 * 1024;
 
-      setProgress(50);
+    const res = await fetch("/api/compress", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        files: files.map((f) => ({ base64: f.data })),
+        targetBytes,
+      }),
+    });
 
-      const pdfDoc = await PDFDocument.load(bytes);
+    const data = await res.json();
 
-      setProgress(70);
-
-      const saved = await pdfDoc.save();
-
-      // ✅ FIXED LINE (only change made)
-      const blob = new Blob([saved as BlobPart], { type: "application/pdf" });
-
-      const url = URL.createObjectURL(blob);
-      localStorage.setItem("protectedPDF", url);
-
-      setProgress(100);
-      setStatus("done");
-      clearStoredFiles();
-    } catch {
-      setStatus("error");
-      setErrorMessage("Failed to protect PDF.");
+    if (!res.ok || !data?.results?.length) {
+      throw new Error("Compression failed");
     }
-  }
 
-  async function handleCopyText() {
-    if (!extractedText) return;
-    await navigator.clipboard.writeText(extractedText);
+    const bytes = Uint8Array.from(
+      atob(data.results[0].file),
+      (c) => c.charCodeAt(0)
+    );
+
+    setDownloadUrl(makeBlobUrl(bytes));
+    setProgress(100);
+    setStatus("done");
+  };
+
+  /* ================= PDF PROTECT ================= */
+  const protectPDF = async (base64: string) => {
+    const bytes = base64ToBytes(base64);
+    const pdf = await PDFDocument.load(bytes);
+    const saved = await pdf.save();
+
+    setDownloadUrl(makeBlobUrl(saved));
+    setStatus("done");
+  };
+
+  /* ================= IMAGE → PDF ================= */
+  const imageToPdf = async (base64: string, type: "jpg" | "png") => {
+    const bytes = base64ToBytes(base64);
+
+    const pdf = await PDFDocument.create();
+    const img =
+      type === "jpg"
+        ? await pdf.embedJpg(bytes)
+        : await pdf.embedPng(bytes);
+
+    const page = pdf.addPage([img.width, img.height]);
+
+    page.drawImage(img, {
+      x: 0,
+      y: 0,
+      width: img.width,
+      height: img.height,
+    });
+
+    const saved = await pdf.save();
+    setDownloadUrl(makeBlobUrl(saved));
+    setStatus("done");
+  };
+
+  /* ================= HELPERS ================= */
+
+  const base64ToBytes = (base64: string) => {
+    const clean = base64.includes(",") ? base64.split(",")[1] : base64;
+    return Uint8Array.from(atob(clean), (c) => c.charCodeAt(0));
+  };
+
+  const makeBlobUrl = (bytes: Uint8Array) => {
+    const blob = new Blob([new Uint8Array(bytes)], {
+      type: "application/pdf",
+    });
+    return URL.createObjectURL(blob);
+  };
+
+  const copyText = async () => {
+    await navigator.clipboard.writeText(text);
     setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  }
+    setTimeout(() => setCopied(false), 1500);
+  };
 
-  /* UI STATES */
+  const download = () => {
+    if (!downloadUrl) return;
+    const a = document.createElement("a");
+    a.href = downloadUrl;
+    a.download = "result.pdf";
+    a.click();
+  };
 
-  if (status === "processing") {
+  /* ================= UI STATES ================= */
+
+  if (status === "processing")
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Loader2 className="h-10 w-10 animate-spin" />
+        <p className="ml-3">{progress}%</p>
       </div>
     );
-  }
 
-  if (status === "error") {
+  if (status === "error")
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <AlertCircle className="h-12 w-12 text-red-500" />
-        <p>{errorMessage}</p>
+      <div className="min-h-screen flex items-center justify-center text-center">
+        <div>
+          <AlertCircle className="h-12 w-12 text-red-500 mx-auto mb-3" />
+          <p>{error}</p>
+        </div>
       </div>
     );
-  }
 
-  if (status === "done") {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center gap-6">
+  /* ================= SUCCESS ================= */
 
-        <CheckCircle className="h-14 w-14 text-green-500" />
+  return (
+    <div className="min-h-screen flex items-center justify-center text-center">
+      <div>
+        <CheckCircle className="h-12 w-12 text-green-500 mx-auto mb-4" />
 
-        {toolId === "ocr" && (
-          <button onClick={handleCopyText}>
-            {copied ? "Copied!" : "Copy Text"}
-          </button>
-        )}
+        <h2 className="text-xl font-semibold mb-4">
+          {toolId === "jpeg-to-pdf"
+            ? "JPEG Converted to PDF!"
+            : toolId === "png-to-pdf"
+            ? "PNG Converted to PDF!"
+            : "Completed Successfully"}
+        </h2>
 
-        {toolId === "pdf-compress" && compressedPdfData && (
+        {downloadUrl && (
           <button
-            onClick={() => {
-              const blob = new Blob(
-                [Uint8Array.from(atob(compressedPdfData), c => c.charCodeAt(0))],
-                { type: "application/pdf" }
-              );
-              const url = URL.createObjectURL(blob);
-              const a = document.createElement("a");
-              a.href = url;
-              a.download = "compressed.pdf";
-              a.click();
-            }}
+            onClick={download}
+            className="px-6 py-3 bg-black text-white rounded-lg"
           >
             Download PDF
           </button>
         )}
 
-        {toolId === "pdf-protect" && (
+        {toolId === "ocr" && (
           <button
-            onClick={() => {
-              const url = localStorage.getItem("protectedPDF");
-              if (!url) return;
-              const a = document.createElement("a");
-              a.href = url;
-              a.download = "protected.pdf";
-              a.click();
-            }}
+            onClick={copyText}
+            className="ml-4 px-6 py-3 border rounded-lg"
           >
-            Download Protected PDF
+            <Copy className="inline w-4 h-4 mr-2" />
+            {copied ? "Copied!" : "Copy Text"}
           </button>
         )}
       </div>
-    );
-  }
-
-  return null;
+    </div>
+  );
 }
